@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PR2: zsheng2</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <script>
+   var canvas;
+    var canvasHist;
+    var gl;
+    var histo;
+    var shaderProgram;
+    var shaderProgramHist;
+    var plotSelection = -1;
+    var pointSelection = -1;
+    var plotSize = 0;
+    var plotCount = 0;
+    var minY = 0;
+    var maxY = 0;
+    var minX = 0;
+    var maxX = plotSize;
+    var minY2 = 0;
+    var maxY2 = 0;   
+    var minX2 = minY;
+    var maxX2 = maxY;
+    var vertexData = new Float32Array([""]);
+    var minVals = new Float32Array([""]);
+    var maxVals = new Float32Array([""]);
+    var selectionRectangle = false;
+    var selectionRectangle2 = false;
+    var oldX = -1;
+    var oldY = -1;
+    var button = false;
+    var count = new Array();
+    var minXinput;
+    var maxXinput;
+    var minYinput;
+    var maxYinput;
+    var minX2input;
+    var maxX2input;
+    var minY2input;
+    var maxY2input;
+    var hData = new Float32Array([""]);
+    var location;
+    var offsetX = 0;
+    var numberOfBins;
+    var binSelection = -1;
+
+// Initialize the webgl canvas
+    function init() {
+      canvas = document.getElementById("plot");
+      
+      minXinput = document.getElementById("minX");
+      maxXinput = document.getElementById("maxX");
+      minYinput = document.getElementById("minY");
+      maxYinput = document.getElementById("maxY");
+            
+      canvas.addEventListener("mousedown", mouseDown, false);
+      canvas.addEventListener("mousemove", mouseMove, false);
+      canvas.addEventListener("mouseup", mouseUp, false);
+      
+      canvasHist = document.getElementById("histogram");            
+      minY2input = document.getElementById("minY2");
+      maxY2input = document.getElementById("maxY2");
+      minX2input = document.getElementById("minX2");
+      maxX2input = document.getElementById("maxX2");
+      numberOfBinsInput = document.getElementById("numberOfBinsInput");
+      
+      canvasHist.addEventListener("mousedown", mouseHDown, false);
+      canvasHist.addEventListener("mousemove", mouseHMove, false);
+      canvasHist.addEventListener("mouseup", mouseHUp, false);
+      
+       gl = null;
+      histo= null;
+      try {
+        gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      }
+      catch (e) {
+      }
+      if (gl) {
+        gl.clearColor(1.0, 1.0, 0.0, 1.0);
+        shaderProgram = initShaders();
+        display();
+      }
+      try {
+        histo = canvasHist.getContext("webgl") || canvasHist.getContext("experimental-webgl");
+      }
+      catch (e) {
+      }
+      if (histo) {
+        histo.clearColor(1.0, 1.0, 0.0, 1.0);
+        shaderProgramHist = initShader2();
+        displayHisto();
+      }
+    }
+  
+  function displayHisto() {
+ 
+    addAxesHist();       
+          histo.clear(histo.COLOR_BUFFER_BIT);
+      if (plotSelection >= 0) {
+      
+        histo.enableVertexAttribArray(histo.getAttribLocation(shaderProgramHist, "vPosition"));
+        histo.bindBuffer(histo.ARRAY_BUFFER, histo.createBuffer());
+        histo.bufferData(histo.ARRAY_BUFFER, hData, histo.STATIC_DRAW);
+        histo.vertexAttribPointer(histo.getAttribLocation(shaderProgramHist, "vPosition"), 2, histo.FLOAT, false, 0, 0); 
+        histo.uniform1i(histo.getUniformLocation(shaderProgramHist, "binSelection"), pointSelection);
+
+        histo.uniform1f(histo.getUniformLocation(shaderProgramHist, "minX2"), minX2);
+
+        histo.uniform1f(histo.getUniformLocation(shaderProgramHist, "maxX2"), maxX2);
+
+        histo.uniform1f(histo.getUniformLocation(shaderProgramHist, "minY2"), minY2);
+
+        histo.uniform1f(histo.getUniformLocation(shaderProgramHist, "maxY2"), maxY2);
+
+
+     histo.uniform1f(histo.getUniformLocation(shaderProgramHist, "offsetX"), 0.0);
+
+        histo.uniform1f(histo.getUniformLocation(shaderProgramHist, "numberOfBins"), numberOfBinsInput);
+
+        histo.uniform1i(histo.getUniformLocation(shaderProgramHist, "vertexType"), 1);
+        histo.drawArrays(histo.LINES,  numberOfBins * 6, 4);
+        histo.drawArrays(histo.TRIANGLES, 6 * numberOfBins + 4, 6);
+        histo.uniform1i(histo.getUniformLocation(shaderProgramHist, "vertexType"), 0); 
+        histo.drawArrays(histo.TRIANGLES, 0, numberOfBins * 6);
+      histo.uniform1i(histo.getUniformLocation(shaderProgramHist, "vertexType"), 3);
+      histo.drawArrays(histo.TRIANGLES, binSelection * 6, 6);
+
+        if (selectionHRectangle) {
+          histo.uniform1i(histo.getUniformLocation(shaderProgramHist, "vertexType"), 2);
+          histo.drawArrays(histo.LINE_LOOP, 6 * numberOfBins + 10, 4);
+        }
+        
+      }
+      
+    }
+    
+// Display the plot
+    function display()
+     {
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      if (plotSelection >= 0) {
+        gl.enableVertexAttribArray(gl.getAttribLocation(shaderProgram, "vPosition"));
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(gl.getAttribLocation(shaderProgram, "vPosition"), 2, gl.FLOAT, false, 0, 0);
+
+// Use the current value of pointSelection  variable as pointSelection vertex shader variable.
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "pointSelection"), pointSelection);
+
+// Use the current value of plotSize  variable as plotSize vertex shader variable.
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "minY"), minY);
+
+// Use the current value of minVal  variable as minVal vertex shader variable.
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "maxY"), maxY);
+
+// Use the current value of maxVal  variable as maxVal vertex shader variable.
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "minX"), minX);
+
+// Use the current value of maxVal  variable as maxVal vertex shader variable.
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "maxX"), maxX);
+
+// Use the current value of pointSelection  variable as pointSelection vertex shader variable.
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "vertexType"), 1);
+        gl.drawArrays(gl.LINES, plotCount * plotSize, 4);
+        gl.drawArrays(gl.TRIANGLES, plotCount * plotSize + 4, 6);
+
+// Draw individual points (GL_POINTS primitive).
+// Specify the starting vertex index and the number of vertices to be used for the primitive drawn. 
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "vertexType"), 0);
+        gl.drawArrays(gl.POINTS, plotSelection * plotSize, plotSize);
+
+
+// Draw line strip(GL_LINE_STRIP primitive).
+// Specify the starting vertex index and the number of vertices to be used for the primitive drawn. 
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "pointSelection"), -1);
+        gl.drawArrays(gl.LINE_STRIP, plotSelection * plotSize, plotSize);
+
+// DRAW RUBBERBAND RECTANGLE
+        if (selectionRectangle) {
+          gl.uniform1i(gl.getUniformLocation(shaderProgram, "vertexType"), 2);
+// Draw line strip(GL_LINE_STRIP primitive).
+// Specify the starting vertex index and the number of vertices to be used for the primitive drawn. 
+          gl.drawArrays(gl.LINE_LOOP, plotCount * plotSize + 10, 4);
+        }
+      }
+    }
+ 
+ 
+ // Set the selected plot and point and updates the drawing.
+    function draw(plot, point) {
+  
+      if (plot != plotSelection || point != pointSelection) {
+        plotSelection = plot;
+        pointSelection = point;
+        if (plotSelection >= 0) {
+          minX = applet.getMinX(plotSelection);
+          maxX = applet.getMaxX(plotSelection);;
+          minY = applet.getMinY(plotSelection);
+          maxY = applet.getMaxY(plotSelection);
+          minY2 = applet.getHMinY(plotSelection);
+          maxY2 = applet.getHMaxY(plotSelection);
+          minX2 = applet.getHMinX(plotSelection);
+          maxX2 = applet.getHMaxX(plotSelection);
+          numberOfBins = applet.getBinNo(plotSelection);
+          binSelection = applet.getBin(pointSelection, plotSelection, numberOfBins, minY2, maxY2);
+          update();
+        }     
+        display();
+        applet.getHistData(plotSelection);
+        displayHisto();
+      }
+    }
+
+    function setHistogram(i){
+     hData = i;
+    }
+    
+    function tableChanged(n, c, sPlot, sPoint, data, min, max, mmin,mmax) {
+      plotSize = n;
+      plotCount = c;
+      plotSelection = sPlot;
+      pointSelection = sPoint;
+      vertexData = data;
+      minVals = min;
+      maxVals = max;
+      
+      minHVals = mmin;
+      maxHVals = mmax;
+      
+      
+      addAxes();
+      display();
+      applet.getHistData(plotSelection);
+      displayHisto();
+    }
+    function reset() {
+            
+      minY = minVals[plotSelection];
+      maxY = maxVals[plotSelection];
+      minX = 0;
+      maxX = plotSize - 1;
+      update();
+      display();
+    }
+    
+    function reset2()
+    {   
+     minY2 = minVals[plotSelection];
+     minX2 = 0;
+     maxY2 = maxVals[plotSelection];
+     maxX2 = 8;
+     setnumberOfBins(8);
+     update();
+     displayHisto();
+    }
+    
+    function setminY2(v) {
+        if (!isNaN(v) && v <= maxY2) {
+        minY2 = parseFloat(v);
+      }
+      update();
+      displayHisto();
+    }
+    function setmaxY2(v) {
+        if (!isNaN(v) && v >= minY2) {
+        maxY2 = parseFloat(v);
+      }
+      update();
+      displayHisto();
+    }
+    function setminX2(v) {
+        if (!isNaN(v) && v <= maxX2) {
+        minX2 = parseFloat(v);
+      }
+      update();
+      displayHisto();
+    }
+    function setmaxX2(v) {
+      if (!isNaN(v) && v >= minX2) {
+        maxX2 = parseFloat(v);
+      }
+      update();
+      displayHisto();
+    }
+    function setnumberOfBins(v) {
+      if (!isNaN(v) && v >= 0) {
+        numberOfBins = parseFloat(v);
+      }
+      update();
+      displayHisto();
+    }
+
+    function setMinX(v) {
+      if (!isNaN(v) && v <= maxX) {
+        minX = parseFloat(v);
+      }
+      update();
+      display();
+    }
+    
+    function setMaxX(v) {
+      if (!isNaN(v) && v >= minX) {
+        maxX = parseFloat(v);
+      }
+      update();
+      display();
+    }
+    
+    function setMinY(v) {
+      if (!isNaN(v) && v <= maxY) {
+        minY = parseFloat(v);
+      }
+      update();
+      display();
+    }
+    
+    function setMaxY(v) {
+      if (!isNaN(v) && v >= minY) {
+        maxY = parseFloat(v);
+      }
+      update();
+      display();
+    }
+    
+    function update() {
+      applet.setCurrent(plotSelection, minX, maxX, minY, maxY);
+      applet.getHistData(plotSelection);
+      applet.setHCurrent(plotSelection, minX2, maxX2, minY2, maxY2, numberOfBins);
+      
+      minXinput.value = minX;
+      maxXinput.value = maxX;
+      minYinput.value = minY;
+      maxYinput.value = maxY;
+      
+      minY2input.value = minY2;
+      maxY2input.value = maxY2;
+      minX2input.value = minX2;
+      numberOfBinsInput.value = numberOfBins;
+    }
+    
+    function addAxesHist()
+    {
+        var valueCount = hData.length - 28;
+        
+        hData[valueCount++] = -0.9;
+        hData[valueCount++] = -0.8;
+        
+        hData[valueCount++] = 0.9;
+        hData[valueCount++] = -0.8;
+
+        hData[valueCount++] = -0.8;
+        hData[valueCount++] = -0.9;
+        
+        hData[valueCount++] = -0.8;
+       hData[valueCount++] = 0.9;
+
+        hData[valueCount++] = 0.85;
+        hData[valueCount++] = -0.75;
+        
+       hData[valueCount++] = 0.85;
+       hData[valueCount++] = -0.85;
+        
+        hData[valueCount++] =  0.9;
+       hData[valueCount++] = -0.8;
+   
+        hData[valueCount++] = -0.85;
+       hData[valueCount++] = 0.85;
+        
+        hData[valueCount++] = -0.75;
+        hData[valueCount++] = 0.85;
+        
+       hData[valueCount++] = -0.8;
+        hData[valueCount++] = 0.9;
+        
+    }
+    
+    function addAxes() {
+        var valueCount = 2 * plotCount * plotSize;
+
+        // X coordinate axis.
+        vertexData[valueCount++] = -0.9;
+        vertexData[valueCount++] = -0.8;
+        vertexData[valueCount++] = 0.9;
+        vertexData[valueCount++] = -0.8;
+
+        // Y coordinate axis.
+        vertexData[valueCount++] = -0.8;
+        vertexData[valueCount++] = -0.9;
+        vertexData[valueCount++] = -0.8;
+        vertexData[valueCount++] = 0.9;
+
+        // X coordinate axis arrow.
+        vertexData[valueCount++] = 0.85;
+        vertexData[valueCount++] = -0.75;
+        vertexData[valueCount++] = 0.85;
+        vertexData[valueCount++] = -0.85;
+        vertexData[valueCount++] =  0.9;
+        vertexData[valueCount++] = -0.8;
+
+        // Y coordinate axis arrow.     
+        vertexData[valueCount++] = -0.85;
+        vertexData[valueCount++] = 0.85;
+        vertexData[valueCount++] = -0.75;
+        vertexData[valueCount++] = 0.85;
+        vertexData[valueCount++] = -0.8;
+        vertexData[valueCount++] = 0.9;
+        
+        }
+     
+    function mouseHDown(e) {
+      if (e.button == 2) {
+        oldX = e.layerX;
+        oldY = e.layerY;
+        return;
+      }
+      selectionHRectangle = true;
+      for (var i = 0; i < plotSize; i++) {
+        count[i] = 0;
+      }
+      hData[2 * plotCount * plotSize + 20] = -1.0 + e.layerX * 2.0 / canvas.width;
+      hData[2 * plotCount * plotSize + 21] = 1.0 - e.layerY * 2.0 / canvas.height;
+    }
+
+    function mouseHUp(e) {
+      selectionHRectangle = false;
+      
+      displayHisto();
+    }
+
+    function mouseHMove(e) {
+      var deltaX, deltaY;
+      if (e.button == 2) {
+        deltaY = (e.layerY - oldY) * 2.0 /canvas.height * (maxY - minY) / 1.6;
+        minY += deltaY;
+        maxY += deltaY;
+        deltaX = (oldX - e.layerX) * 2.0 / canvas.width * (maxX - minX) / 1.6;
+        minX += deltaX;
+        maxX += deltaX;
+         oldX = e.layerX;
+        oldY = e.layerY;
+        update();
+         displayHisto();
+        return;
+      }
+      if (!selectionHRectangle) {
+        return;
+      }
+      var valueCount = 2 * plotCount * plotSize;
+      hData[valueCount + 24] = -1.0 + e.layerX * 2.0 / canvas.width;
+      hData[valueCount + 25] = 1.0 - e.layerY * 2.0 / canvas.height;
+      hData[valueCount + 22] = hData[valueCount + 20];
+      hData[valueCount + 23] = hData[valueCount + 25];
+      hData[valueCount + 26] = hData[valueCount + 24];
+      hData[valueCount + 27] = hData[valueCount + 21];
+
+      if (plotSelection == -1) {
+        return;
+      }
+      var maxIndex = -1;
+      var max = 0;
+      var xMin = Math.min(hData[valueCount + 20], hData[valueCount + 24]);
+      var xMax = Math.max(hData[valueCount + 20], hData[valueCount + 24]);
+      var yMin = Math.min(hData[valueCount + 21], hData[valueCount + 25]);
+      var yMax = Math.max(hData[valueCount + 21], hData[valueCount + 25]);
+      for (var i = 0; i < plotSize; i++) {
+        var x = 0.0;
+        if (plotSize != 1) {
+          x = -0.8 + (i - minX) / (maxX - minX) * 1.6;
+        }
+        var y = 0.0;    
+        if (maxY != minY) {
+          y = -0.8 + (vertexData[2 * (plotSelection * plotSize + i) + 1] - minY) / (maxY - minY) * 1.6;
+        }
+        if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+          count[i]++;
+        }
+        else {
+          count[i] = 0;
+        }
+        if (count[i] > max) {
+          max = count[i];
+          maxIndex = i;
+        }
+      }
+      if (maxIndex >= 0) {
+        pointSelection = maxIndex;
+        applet.stateChanged(pointSelection);
+      }
+      displayHisto();
+    }
+     
+     
+    function mouseDown(e) {
+      if (e.button == 2) {
+        oldX = e.layerX;
+        oldY = e.layerY;
+        return;
+      }
+      selectionRectangle = true;
+      for (var i = 0; i < plotSize; i++) {
+        count[i] = 0;
+      }
+      vertexData[2 * plotCount * plotSize + 20] = -1.0 + e.layerX * 2.0 / canvas.width;
+      vertexData[2 * plotCount * plotSize + 21] = 1.0 - e.layerY * 2.0 / canvas.height;
+    }
+
+    function mouseUp(e) {
+      selectionRectangle = false;
+      display();
+    }
+
+    function mouseMove(e) {
+      var deltaX, deltaY;
+      if (e.button == 2) {
+        deltaY = (e.layerY - oldY) * 2.0 /canvas.height * (maxY - minY) / 1.6;
+        minY += deltaY;
+        maxY += deltaY;
+        deltaX = (oldX - e.layerX) * 2.0 / canvas.width * (maxX - minX) / 1.6;
+        minX += deltaX;
+        maxX += deltaX;
+         oldX = e.layerX;
+        oldY = e.layerY;
+        update();
+         display();
+        return;
+      }
+      if (!selectionRectangle) {
+        return;
+      }
+      var valueCount = 2 * plotCount * plotSize;
+      vertexData[valueCount + 24] = -1.0 + e.layerX * 2.0 / canvas.width;
+      vertexData[valueCount + 25] = 1.0 - e.layerY * 2.0 / canvas.height;
+      vertexData[valueCount + 22] = vertexData[valueCount + 20];
+      vertexData[valueCount + 23] = vertexData[valueCount + 25];
+      vertexData[valueCount + 26] = vertexData[valueCount + 24];
+      vertexData[valueCount + 27] = vertexData[valueCount + 21];
+
+      if (plotSelection == -1) {
+        return;
+      }
+      var maxIndex = -1;
+      var max = 0;
+      var xMin = Math.min(vertexData[valueCount + 20], vertexData[valueCount + 24]);
+      var xMax = Math.max(vertexData[valueCount + 20], vertexData[valueCount + 24]);
+      var yMin = Math.min(vertexData[valueCount + 21], vertexData[valueCount + 25]);
+      var yMax = Math.max(vertexData[valueCount + 21], vertexData[valueCount + 25]);
+      for (var i = 0; i < plotSize; i++) {
+        var x = 0.0;
+        if (plotSize != 1) {
+          x = -0.8 + (i - minX) / (maxX - minX) * 1.6;
+        }
+        var y = 0.0;    
+        if (maxY != minY) {
+          y = -0.8 + (vertexData[2 * (plotSelection * plotSize + i) + 1] - minY) / (maxY - minY) * 1.6;
+        }
+        if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+          count[i]++;
+        }
+        else {
+          count[i] = 0;
+        }
+        if (count[i] > max) {
+          max = count[i];
+          maxIndex = i;
+        }
+      }
+      if (maxIndex >= 0) {
+        pointSelection = maxIndex;
+        applet.stateChanged(pointSelection);
+      }
+      display();
+    }
+
+// Initialize shaders and create the shader program.
+    function initShaders() {
+      var fragmentShader = getShader(gl, "fragment-shader");
+      var vertexShader = getShader(gl, "vertex-shaderHist");
+      var shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vertexShader);
+      gl.attachShader(shaderProgram, fragmentShader);
+      gl.linkProgram(shaderProgram);
+      if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        alert("Unable to initialize the shader program.");
+      }
+      gl.useProgram(shaderProgram);
+      
+      return shaderProgram;
+    }
+    
+    function initShader2() {
+      var fragmentShader2 = getShader(histo, "fragment-shaderHist");
+      var vertexShader2 = getShader(histo, "vertex-shaderHist2");
+      var shaderProgramHist = histo.createProgram();
+      histo.attachShader(shaderProgramHist, vertexShader2);
+      histo.attachShader(shaderProgramHist, fragmentShader2);
+      histo.linkProgram(shaderProgramHist);
+      if (!histo.getProgramParameter(shaderProgramHist, histo.LINK_STATUS)) {
+        alert("Unable to initialize the shader program2");
+      }
+      histo.useProgram(shaderProgramHist);
+      
+      return shaderProgramHist;
+    }
+
+// Read and create a shader.  
+    function getShader(gl, id) {
+      var shaderScript = document.getElementById(id);
+      if (!shaderScript) {
+       return null;
+      }
+      var theSource = "";
+      var currentChild = shaderScript.firstChild;
+      while(currentChild) {
+        if (currentChild.nodeType == 3) {
+          theSource += currentChild.textContent;
+        }   
+        currentChild = currentChild.nextSibling;
+      }
+      var shader;
+      if (shaderScript.type == "x-shader/x-fragment") {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+      } else if (shaderScript.type == "x-shader/x-vertex") {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+      } else {
+        return null;
+      }
+      gl.shaderSource(shader, theSource);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+        return null;
+      }
+      return shader;
+    }
+
+  </script>
+  
+  <script id="vertex-shaderHist" type="x-shader/x-vertex">
+    precision highp float;
+    attribute vec4 vPosition;
+    uniform int pointSelection;
+    uniform float minY;
+    uniform float maxY;
+    uniform float minX;
+    uniform float maxX;
+    uniform int vertexType;
+    varying vec4 vColor;
+
+    void main(void) {
+      if (vertexType == 2) {
+        gl_Position = vec4(vPosition.x, vPosition.y, 0.0, 1.0);
+        vColor = vec4(0.0, 1.0, 0.0, 1.0);
+      }
+      else if (vertexType == 1) {
+        gl_Position = vec4(vPosition.x, vPosition.y, 0.0, 1.0);
+        vColor = vec4(0.0, 0.0, 0.0, 1.0);
+      }
+      else {
+        float y = -0.8 + (vPosition.y - minY) / (maxY - minY) * 1.6;
+        if (minY == maxY) {
+          y = 0.0;
+        }
+        gl_Position = vec4(-0.8 + (vPosition.x - minX) / (maxX - minX) * 1.6, y, 0.0, 1.0);
+        gl_PointSize = 3.0;
+        if (int(vPosition.x) == pointSelection) {
+          vColor = vec4(1.0, 0.0, 0.0, 1.0);
+        }
+        else {
+          vColor = vec4(0.0, 0.0, 1.0, 1.0);
+        }
+      }
+    }
+  </script>
+  
+  <script id="vertex-shaderHist2" type="x-shader/x-vertex"> 
+  precision highp float;
+                    attribute vec4 vPosition;
+                    varying vec4 vColor;
+                    uniform int binSelection;
+                    uniform float minX2;
+                    uniform float maxX2;
+                    uniform float minY2;
+                    uniform float maxY2;
+                    uniform float offsetX;
+                    uniform float numberOfBins;
+                    uniform int vertexType;
+                    void main(void) {
+                      if(vertexType == 2) {
+                        gl_Position = vec4(vPosition.x, vPosition.y, 0.0, 1.0);
+                        vColor = vec4(0.0, 1.0, 0.0, 1.0);
+                      }
+                      else if(vertexType == 1){
+                        gl_Position = vec4(vPosition.x, vPosition.y, 0.0, 1.0);
+                        vColor = vec4(0.0, 0.0, 0.0, 1.0);
+                      }
+                      else if(vertexType == 3){
+                        float x = offsetX + -0.8 + 1.6 * (vPosition.x) / float(8);
+                        float y = -0.8 + 1.6 * (vPosition.y - minX2) / (maxX2 - minX2);
+                         gl_Position = vec4(x , y, 0.0, 1.0);
+                         vColor = vec4(1.0, 0.0, 0.0, 1.0);
+                      }
+                      else{
+                        float x = offsetX + -0.8 + 1.6 * (vPosition.x) / float(8);
+                        float y = -0.8 + 1.6 * (vPosition.y - minX2) / (maxX2 - minX2);
+                         gl_Position = vec4(x , y, 0.0, 1.0);
+                        if (float (binSelection) == vPosition.z / float (6)) {
+                          vColor = vec4(1.0, 0.0, 0.0, 1.0);
+                        }
+                        else {
+                          vColor = vec4(0.0, 0.0, 1.0, 1.0);
+                        }
+                      }
+        
+                }  
+  </script>
+  
+  <script id="fragment-shader" type="x-shader/x-fragment">
+    precision mediump float;
+    varying vec4 vColor;
+
+    void main(void) {
+      gl_FragColor = vColor;
+     }
+  </script>
+  
+  <script id="fragment-shaderHist" type="x-shader/x-fragment">
+precision mediump float;
+varying vec4 vColor;
+
+void main(void) {
+  gl_FragColor = vColor;
+}
+</script>
+</head>
+
+<style type="text/css">
+object {  
+  margin-left : 0px;
+  margin-bottom : 0px;
+  margin-top : 0px;
+  padding-top : 0px;
+  padding-left : 0px;
+  position: absolute;
+  left : 0px;
+  top : 0px;
+}
+
+canvas[id="plot"] {  
+  margin-left : 0px;
+  margin-top : 0px;
+  padding-left : 0px;
+  padding-top : 0px;
+  position: absolute;
+  left : 0px;
+  top : 400px;
+}
+
+canvas[id="histogram"] {
+  margin-left : 0px;
+  margin-top : 0px;
+  padding-left : 0px;
+  padding-top : 0px;
+  position: absolute;
+  left : 400px;
+  top : 0px;
+}
+
+input {
+  margin-left : 0px;
+  margin-right : 0px;
+  margin-bottom : 0px;
+  margin-top : 0px;
+  padding-left : 0px;
+  padding-right : 0px;
+  padding-bottom : 0px;
+  padding-top : 0px;
+  position: absolute;
+  height : 40px;
+  width : 133px;
+  font-size : 18px;
+  font-family : Arial;
+}
+
+p {
+  background-color : #CCCCCC;
+  margin-left : 0px;
+  margin-right : 0px;
+  margin-bottom : 0px;
+  margin-top : 0px;
+  padding-left : 0px;
+  padding-right : 0px;
+  padding-bottom : 0px;
+  padding-top : 12px;
+  position: absolute;
+  height : 40px;
+  width : 133px;
+  text-align : center;
+  font-size : 18px;
+  font-family : Arial;
+}
+
+input[type="text"] {
+  width : 128px;
+  height : 34px;
+}
+
+input[id="reset"] {
+  background-color : #CCCCCC;
+  left : 0px;
+  top : 680px;
+}
+
+p[id="min"] {
+  left : 134px;
+  top : 680px;
+}
+
+p[id="max"] {
+  left : 267px;
+  top : 680px;
+}
+
+p[id="x"] {
+  left : 0px;
+  top : 720px;
+}
+
+input[id="reset2"] {
+  background-color : #CCCCCC;
+  left : 400px;
+  top : 680px;
+}
+
+p[id="minnn"] {
+  left : 534px;
+  top : 680px;
+}
+
+p[id="maxxxx"] {
+  left : 667px;
+  top : 680px;
+}
+
+p[id="binNumber"] {
+  left : 400px;
+  top : 720px;
+}
+
+input[id="minX"] {
+  left : 133px;
+  top : 735px;
+}
+
+input[id="minY2"] {
+  left : 534px;
+  top : 735px;
+}
+
+input[id="maxX"] {
+  left : 266px;
+  top : 735px;
+}
+input[id="maxY2"] {
+  left : 666px;
+  top : 735px;
+}
+
+p[id="y"] {
+  left : 0px;
+  top : 760px;
+}
+
+input[id="maxY"] {
+  left : 266px;
+  top : 780px;
+}
+
+p[id="binCount"] {
+  left : 400px;
+  top : 760px;
+}
+
+input[id="minY"] {
+  left : 133px;
+  top : 780px;
+}
+input[id="minX2"] {
+  left : 534px;
+  top : 780px;
+}
+p[id="numberOfBins"] {
+  left : 534px;
+  top : 630px;
+}
+
+input[id="numberOfBinsInput"] {
+  left : 666px;
+  top : 640px;
+}
+
+input[id="maxX2"] {
+  left : 666px;
+  top : 780px;
+}
+
+</style>
+
+<body onload="init()">
+
+<object type="application/x-java-applet" id="applet" height="400" width="400" style>
+  <param name="code" value="PR2" />
+  <param name="archive" value="PR2.jar" />
+  Applet failed to run.  No Java plug-in was found.
+</object>
+
+<canvas id="plot" height="280" width="400" oncontextmenu="return false;"></canvas>
+
+<input id="reset" type="button" value="Default" onclick="reset();">
+<p id="min">Min</p>
+<p id="max">Max</p>
+<p id="x">X-Value</p>
+<p id="y">Y-Value</p>
+<input id="minX" type="text" value="0" onkeydown="if (event.keyCode == 13) setMinX(value);" onblur="update(); display();">
+<input id="maxX" type="text" value="0" onkeydown="if (event.keyCode == 13) setMaxX(value);" onblur="update(); display();">
+<input id="minY" type="text" value="0" onkeydown="if (event.keyCode == 13) setMinY(value);" onblur="update(); display();">
+<input id="maxY" type="text" value="0" onkeydown="if (event.keyCode == 13) setMaxY(value);" onblur="update(); display();">
+
+<canvas id="histogram" height="640" width="400" oncontextmenu="return false;"></canvas>
+<input id="reset2" type="button" value="Default" onclick="reset2();">
+<p id="minnn">Min</p>
+<p id="maxxxx">Max</p>
+<p id="binNumber">Bin-Value</p>
+<p id="binCount">Bin-Count</p>
+<p id="numberOfBins">No. Of Bins</p>
+<input id="minY2" type="text" value="0" onkeydown="if (event.keyCode == 13) setminY2(value);" onblur="update(); display();">
+<input id="maxY2" type="text" value="0" onkeydown="if (event.keyCode == 13) setmaxY2(value);" onblur="update(); display();">
+<input id="minX2" type="text" value="0" onkeydown="if (event.keyCode == 13) setminX2(value);" onblur="update(); display();">
+<input id="maxX2" type="text" value="0" onkeydown="if (event.keyCode == 13) setmaxX2(value);" onblur="update(); display();">
+<input id="numberOfBinsInput" type="text" value="0" onkeydown="if (event.keyCode == 13) setnumberOfBins(value);" onblur="update(); display();">
+</body>
+
+</html>
